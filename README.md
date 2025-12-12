@@ -101,18 +101,19 @@ sudo apk add gcc make curl-dev json-c-dev musl-dev
 ## Usage
 
 ```bash
+# from anywhere interminal after running `sudo make install`
 # Full speed test (download + upload)
-./speedtest
+speedtest
 
 # Quick test (download only, faster)
-./speedtest -q
-./speedtest --quick
+speedtest -q
+speedtest --quick
 
 # Show help
-./speedtest --help
+speedtest --help
 
 # Show version
-./speedtest --version
+speedtest --version
 ```
 
 ## Example Output
