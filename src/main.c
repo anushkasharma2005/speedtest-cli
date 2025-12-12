@@ -5,6 +5,8 @@
 #include "../include/ip_info.h"
 #include "../include/display.h"
 
+
+
 void print_usage(const char *program_name) {
     printf("Usage: %s [options]\n", program_name);
     printf("\nOptions:\n");
@@ -19,8 +21,13 @@ void print_version(void) {
     printf("A lightweight network speed test tool\n");
 }
 
+
+// Global flag for quick mode
+int g_quick_mode = 0;
+
+
 int main(int argc, char *argv[]) {
-    int quick_mode = 0;
+    // int quick_mode = 0;
     
     // Parse command line arguments
     for (int i = 1; i < argc; i++) {
@@ -31,7 +38,7 @@ int main(int argc, char *argv[]) {
             print_version();
             return 0;
         } else if (strcmp(argv[i], "-q") == 0 || strcmp(argv[i], "--quick") == 0) {
-            quick_mode = 1;
+            g_quick_mode = 1;
         } else {
             printf("Unknown option: %s\n", argv[i]);
             print_usage(argv[0]);

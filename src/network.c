@@ -11,6 +11,9 @@
 #include <unistd.h>
 #include <stdatomic.h>
 
+// External quick mode flag from main.c
+extern int g_quick_mode;
+
 // Better test servers - includes Asian/Global CDNs
 static const char *DOWNLOAD_TEST_URLS[] = {
     // Cloudflare (has edge servers in India)
@@ -31,8 +34,8 @@ static const char *UPLOAD_TEST_URLS[] = {
     NULL
 };
 
-#define NUM_PARALLEL_CONNECTIONS 8  // Increased from 4
-#define TEST_DURATION_SECONDS 12    // Slightly longer test
+#define NUM_PARALLEL_CONNECTIONS 8
+#define TEST_DURATION_SECONDS 12
 
 // Shared data structure for threads
 typedef struct {
@@ -105,10 +108,9 @@ static void *download_thread(void *arg) {
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
     curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
     curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
-    curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 512000L);  // Larger buffer
-    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);  // HTTP/2
+    curl_easy_setopt(curl, CURLOPT_BUFFERSIZE, 512000L);
+    curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
     
-    // Check stop callback
     curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, check_stop_callback);
     curl_easy_setopt(curl, CURLOPT_XFERINFODATA, NULL);
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
@@ -130,7 +132,7 @@ void network_cleanup(void) {
     curl_global_cleanup();
 }
 
-// Find best server by latency - returns URL and latency
+// Find best server by latency
 static const char *find_best_server(double *out_latency) {
     double best_latency = 999999.0;
     int best_index = 0;
@@ -177,7 +179,6 @@ double test_download_speed(const char *url, size_t expected_size) {
     pthread_t threads[NUM_PARALLEL_CONNECTIONS];
     ThreadData thread_data[NUM_PARALLEL_CONNECTIONS];
     
-    // Reset global counter
     atomic_store(&g_total_bytes, 0);
     g_test_running = 1;
     
@@ -185,7 +186,6 @@ double test_download_speed(const char *url, size_t expected_size) {
     
     double global_start = get_current_time();
     
-    // Start all download threads
     for (int i = 0; i < NUM_PARALLEL_CONNECTIONS; i++) {
         thread_data[i].url = url;
         atomic_store(&thread_data[i].bytes_transferred, 0);
@@ -195,26 +195,21 @@ double test_download_speed(const char *url, size_t expected_size) {
         pthread_create(&threads[i], NULL, download_thread, &thread_data[i]);
     }
     
-    // Wait a moment for threads to start
     usleep(200000);
     
-    // Variables for speed calculation
     size_t last_bytes = 0;
     double last_time = global_start;
     double speed_samples[30];
     int sample_count = 0;
     
-    // Monitor progress with live updates
     while (1) {
-        usleep(400000);  // Update every 0.4 seconds
+        usleep(400000);
         
         double current_time = get_current_time();
         double elapsed = current_time - global_start;
         
-        // Get current total bytes
         size_t current_bytes = atomic_load(&g_total_bytes);
         
-        // Calculate speed for this interval
         double interval = current_time - last_time;
         size_t interval_bytes = current_bytes - last_bytes;
         double instant_speed = 0.0;
@@ -222,17 +217,14 @@ double test_download_speed(const char *url, size_t expected_size) {
         if (interval > 0 && interval_bytes > 0) {
             instant_speed = ((double)interval_bytes * 8.0 / interval) / 1000000.0;
             
-            // Store sample (skip first 2 seconds - TCP slow start)
             if (elapsed > 2.0 && sample_count < 30) {
                 speed_samples[sample_count++] = instant_speed;
             }
         }
         
-        // Calculate progress percentage
         int percent = (int)((elapsed / TEST_DURATION_SECONDS) * 100);
         if (percent > 100) percent = 100;
         
-        // Display live progress
         printf("\r\033[K   Download: %6.2f Mbps [%3d%%] [", instant_speed, percent);
         int bars = percent / 2;
         for (int i = 0; i < 50; i++) {
@@ -246,23 +238,19 @@ double test_download_speed(const char *url, size_t expected_size) {
         last_bytes = current_bytes;
         last_time = current_time;
         
-        // Check if test duration reached
         if (elapsed >= TEST_DURATION_SECONDS) {
             g_test_running = 0;
             break;
         }
     }
     
-    // Wait for all threads to finish
     for (int i = 0; i < NUM_PARALLEL_CONNECTIONS; i++) {
         pthread_join(threads[i], NULL);
     }
     
-    // Calculate final speed using median (more robust than mean)
     double final_speed = 0.0;
     
     if (sample_count > 0) {
-        // Sort samples
         for (int i = 0; i < sample_count - 1; i++) {
             for (int j = i + 1; j < sample_count; j++) {
                 if (speed_samples[i] > speed_samples[j]) {
@@ -273,11 +261,9 @@ double test_download_speed(const char *url, size_t expected_size) {
             }
         }
         
-        // Use 75th percentile (like Ookla does)
         int idx_75 = (sample_count * 3) / 4;
         if (idx_75 >= sample_count) idx_75 = sample_count - 1;
         
-        // Average top 25% of samples
         double sum = 0.0;
         int count = 0;
         for (int i = idx_75; i < sample_count; i++) {
@@ -287,10 +273,9 @@ double test_download_speed(const char *url, size_t expected_size) {
         if (count > 0) {
             final_speed = sum / count;
         } else {
-            final_speed = speed_samples[sample_count / 2];  // fallback to median
+            final_speed = speed_samples[sample_count / 2];
         }
     } else {
-        // Fallback: calculate from total bytes
         size_t total = atomic_load(&g_total_bytes);
         double duration = get_current_time() - global_start;
         if (duration > 2.0) {
@@ -373,7 +358,6 @@ double test_upload_speed(const char *url, size_t data_size) {
     curl_easy_setopt(curl, CURLOPT_TCP_NODELAY, 1L);
     curl_easy_setopt(curl, CURLOPT_HTTP_VERSION, CURL_HTTP_VERSION_2_0);
     
-    // Progress callback for live updates
     curl_easy_setopt(curl, CURLOPT_XFERINFOFUNCTION, upload_progress_callback);
     curl_easy_setopt(curl, CURLOPT_XFERINFODATA, &prog);
     curl_easy_setopt(curl, CURLOPT_NOPROGRESS, 0L);
@@ -403,7 +387,6 @@ double test_latency(const char *url) {
     printf("   Testing latency... ");
     fflush(stdout);
     
-    // Do 10 pings
     for (int i = 0; i < 10; i++) {
         curl = curl_easy_init();
         if (!curl) continue;
@@ -434,7 +417,6 @@ double test_latency(const char *url) {
         return -1.0;
     }
     
-    // Sort and take minimum (like ping does)
     for (int i = 0; i < successful_pings - 1; i++) {
         for (int j = i + 1; j < successful_pings; j++) {
             if (latencies[i] > latencies[j]) {
@@ -445,7 +427,6 @@ double test_latency(const char *url) {
         }
     }
     
-    // Report minimum latency (best case)
     double min_latency = latencies[0];
     printf("%.2f ms\n", min_latency);
     
@@ -462,20 +443,25 @@ SpeedTestResult run_speed_test(void) {
     double server_latency;
     const char *best_server = find_best_server(&server_latency);
     
-    // Test latency to Google (reliable, has India edge servers)
+    // Test latency
     result.latency_ms = test_latency("https://www.google.co.in");
     
     // Test download
     printf("\n");
     result.download_speed_mbps = test_download_speed(best_server, 0);
     
-    // Test upload
-    printf("\n");
-    result.upload_speed_mbps = test_upload_speed(UPLOAD_TEST_URLS[0], 25 * 1024 * 1024);
+    // Test upload (skip if quick mode)
+    if (!g_quick_mode) {
+        printf("\n");
+        result.upload_speed_mbps = test_upload_speed(UPLOAD_TEST_URLS[0], 25 * 1024 * 1024);
+    } else {
+        printf("\n   Upload: Skipped (quick mode)\n");
+        result.upload_speed_mbps = 0.0;
+    }
     
     printf("─────────────────────────────────────────────────────────────────────────────────────────────\n");
     
-    result.success = (result.download_speed_mbps > 0 || result.upload_speed_mbps > 0);
+    result.success = (result.download_speed_mbps > 0);
     
     return result;
 }
