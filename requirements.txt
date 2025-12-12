@@ -1,0 +1,31 @@
+# Build Dependencies for speedtest CLI tool
+# 
+# This project requires the following system packages:
+#
+# Core dependencies:
+# - gcc or clang (C compiler)
+# - make (build tool)
+# - libcurl (HTTP client library)
+# - json-c (JSON parsing library)
+#
+# Installation by distro:
+#
+# Arch Linux / Manjaro:
+#   sudo pacman -S gcc make curl json-c
+#
+# Debian / Ubuntu / Linux Mint:
+#   sudo apt update
+#   sudo apt install gcc make libcurl4-openssl-dev libjson-c-dev
+#
+# Fedora / RHEL / CentOS:
+#   sudo dnf install gcc make libcurl-devel json-c-devel
+#
+# openSUSE:
+#   sudo zypper install gcc make libcurl-devel libjson-c-devel
+#
+# Alpine Linux:
+#   sudo apk add gcc make curl-dev json-c-dev musl-dev
+#
+# macOS (using Homebrew):
+#   brew install curl json-c
+#
