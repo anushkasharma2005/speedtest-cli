@@ -19,7 +19,7 @@ A lightweight command-line internet speed test tool written in C. Measures downl
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/speedtest-cli.git
+git clone https://github.com/anushkasharma2005/speedtest-cli.git
 cd speedtest-cli
 
 # Install dependencies (requires sudo)
